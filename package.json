@@ -10,13 +10,14 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "api:dev": "wrangler dev --config wrangler.api.jsonc",
     "db:migrate": "wrangler d1 migrations apply benchboard --local --config wrangler.api.jsonc",
-    "pages:dev": "wrangler pages dev --config wrangler.pages.jsonc --port 8788",
+    "pages:dev": "wrangler pages dev --port 8788",
     "cli": "node --import tsx cli/main.ts",
     "test:integration": "node --import tsx tests/integration.ts",
     "deploy:api": "wrangler deploy --config wrangler.api.jsonc",
-    "deploy:ui": "npm run build && wrangler pages deploy --config wrangler.pages.jsonc",
+    "deploy:ui": "npm run build && wrangler pages deploy",
     "db:migrate:remote": "wrangler d1 migrations apply benchboard --remote --config wrangler.api.jsonc",
-    "dev:tailscale": "node scripts/dev-tailscale.mjs"
+    "dev:tailscale": "node scripts/dev-tailscale.mjs",
+    "deploy": "node scripts/deploy.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260924.1",

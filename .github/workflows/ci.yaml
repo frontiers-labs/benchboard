@@ -2,6 +2,9 @@ name: CI
 on: [push, pull_request]
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -16,3 +19,28 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run test:integration
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: cloudflare-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Provision and deploy Cloudflare
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BENCHBOARD_SUBMIT_TOKEN: ${{ secrets.BENCHBOARD_SUBMIT_TOKEN }}
+          BENCHBOARD_CANDIDATE_TOKEN: ${{ secrets.BENCHBOARD_CANDIDATE_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'

@@ -101,23 +101,24 @@ The same CLI check works in a local pre-commit hook, provided the local machine/
 
 ## Deploy to Cloudflare
 
-```sh
-npx wrangler login
-npx wrangler d1 create benchboard
-```
+Pushes to `master` run tests, then deploy D1, the Worker API and the Pages frontend. Pull requests run tests only. Production deployments are serialized so database migrations and Worker secrets cannot race.
 
-Put the returned database ID into `wrangler.api.jsonc`, replacing the all-zero local placeholder. Then:
+Configure these repository Actions secrets:
 
-```sh
-npm run db:migrate:remote
-npx wrangler secret put SUBMIT_TOKEN --config wrangler.api.jsonc
-# Optional separate credential for storing candidates, never give it to untrusted PR code.
-npx wrangler secret put CANDIDATE_TOKEN --config wrangler.api.jsonc
-npm run deploy:api
-VITE_API_URL=https://YOUR_API.workers.dev npm run deploy:ui
-```
+| Secret | Purpose |
+| --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | Destination account ID |
+| `CLOUDFLARE_API_TOKEN` | Account-scoped token with Workers Scripts Edit, D1 Edit and Cloudflare Pages Edit |
+| `BENCHBOARD_SUBMIT_TOKEN` | Random credential for nightly submissions |
+| `BENCHBOARD_CANDIDATE_TOKEN` | Separate random credential for storing candidates |
 
-Create the Pages project `benchboard` when Wrangler requests it, or create it in the Cloudflare dashboard first. Configure custom domains there if needed. Keep `.dev.vars` and `.env` private. The write endpoint rejects missing credentials; read and check routes are public with CORS support. Configure Cloudflare request-rate limits for public API traffic before broad exposure.
+The deployment script finds or creates the D1 database named `benchboard`, applies pending migrations, deploys `benchboard-api`, and synchronizes its two submission secrets. It then finds or creates the Pages project `benchboard` with production branch `master`, builds the UI with the deployed API URL, publishes it, and checks both public endpoints. URLs appear in the Actions job summary. Repeating deployment reuses the same database and applies only new migrations.
+
+`wrangler.jsonc` is the Pages configuration. Worker commands use `wrangler.api.jsonc` explicitly. The automated deployment resolves the production database ID into an ignored generated configuration, leaving the local development database separate. To deploy the same way from a terminal, provide the four environment variables above and run `npm run deploy`.
+
+Use a dedicated API token for CI. A Wrangler OAuth login can deploy interactively but does not grant API-token management permission. Store the API token as a GitHub secret, never in this repository. Configure custom domains in Cloudflare if needed.
+
+Read and check routes are public with CORS support. Submission routes require their respective bearer credential. Configure Cloudflare request-rate limits for public API traffic before broad exposure.
 
 Runs are bounded to 1 MB per submission and 10,000 measurements, with 1,000 samples per measurement. Metadata nesting is bounded. Paginated history avoids loading the whole archive. This initial design stores immutable run documents rather than a metric warehouse; benchmark artifacts such as Cachegrind profiles stay in CI artifacts. Back up D1 through Cloudflare's D1 facilities and review retention as the archive grows.
 
