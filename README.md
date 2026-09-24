@@ -112,9 +112,11 @@ Configure these repository Actions secrets:
 | `BENCHBOARD_SUBMIT_TOKEN` | Random credential for nightly submissions |
 | `BENCHBOARD_CANDIDATE_TOKEN` | Separate random credential for storing candidates |
 
+Set the repository Actions variable `BENCHBOARD_API_URL` to `https://benchboard-api.terantamoulamp.workers.dev`. Providing the origin directly lets the CI token stay scoped to this Worker without account-wide Workers read access.
+
 The deployment script finds or creates the D1 database named `benchboard`, applies pending migrations, deploys `benchboard-api`, and synchronizes its two submission secrets. It then finds or creates the Pages project `benchboard` with production branch `master`, builds the UI with the deployed API URL, publishes it, and checks both public endpoints. URLs appear in the Actions job summary. Repeating deployment reuses the same database and applies only new migrations.
 
-`wrangler.jsonc` is the Pages configuration. Worker commands use `wrangler.api.jsonc` explicitly. The automated deployment resolves the production database ID into an ignored generated configuration, leaving the local development database separate. To deploy the same way from a terminal, provide the four environment variables above and run `npm run deploy`.
+`wrangler.jsonc` is the Pages configuration. Worker commands use `wrangler.api.jsonc` explicitly. The automated deployment resolves the production database ID into an ignored generated configuration, leaving the local development database separate. To deploy the same way from a terminal, provide the four secrets and `BENCHBOARD_API_URL` as environment variables and run `npm run deploy`.
 
 Use a dedicated API token for CI. A Wrangler OAuth login can deploy interactively but does not grant API-token management permission. Store the API token as a GitHub secret, never in this repository. Configure custom domains in Cloudflare if needed.
 

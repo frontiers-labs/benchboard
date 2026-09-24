@@ -2,8 +2,11 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const required = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'BENCHBOARD_SUBMIT_TOKEN', 'BENCHBOARD_CANDIDATE_TOKEN'];
+const required = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'BENCHBOARD_SUBMIT_TOKEN', 'BENCHBOARD_CANDIDATE_TOKEN', 'BENCHBOARD_API_URL'];
 for (const name of required) if (!process.env[name]) throw new Error(`Missing ${name}`);
+const apiAddress = new URL(process.env.BENCHBOARD_API_URL);
+if (apiAddress.protocol !== 'https:' || apiAddress.username || apiAddress.password || apiAddress.pathname !== '/' || apiAddress.search || apiAddress.hash) throw new Error('BENCHBOARD_API_URL must be an HTTPS origin');
+const apiUrl = apiAddress.origin;
 const account = process.env.CLOUDFLARE_ACCOUNT_ID;
 if (!/^[a-f0-9]{32}$/.test(account)) throw new Error('Invalid Cloudflare account ID');
 const apiBase = `https://api.cloudflare.com/client/v4/accounts/${account}`;
@@ -44,9 +47,6 @@ await wrangler('deploy', '--config', config);
 await command(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'secret', 'bulk', '--config', config], {
   input: JSON.stringify({ SUBMIT_TOKEN: process.env.BENCHBOARD_SUBMIT_TOKEN, CANDIDATE_TOKEN: process.env.BENCHBOARD_CANDIDATE_TOKEN }),
 });
-const { subdomain } = await cloudflare('/workers/subdomain');
-if (!subdomain || !/^[a-z0-9-]+$/.test(subdomain)) throw new Error('Account has no valid workers.dev subdomain');
-const apiUrl = `https://${base.name}.${subdomain}.workers.dev`;
 let project = await cloudflare(`/pages/projects/${pages.name}`, 'GET', undefined, true);
 if (!project) project = await cloudflare('/pages/projects', 'POST', { name: pages.name, production_branch: 'master' });
 if (project.production_branch !== 'master') throw new Error('Existing Pages project must use master as its production branch');
