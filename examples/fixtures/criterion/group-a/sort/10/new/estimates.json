@@ -1,0 +1,4 @@
+{
+  "mean": { "confidence_interval": { "confidence_level": 0.95, "lower_bound": 1800, "upper_bound": 2200 }, "point_estimate": 2000, "standard_error": 100 },
+  "median": { "confidence_interval": { "confidence_level": 0.95, "lower_bound": 1700, "upper_bound": 2100 }, "point_estimate": 1950, "standard_error": 90 }
+}

@@ -1,0 +1,103 @@
+name: Benchboard
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+permissions:
+  contents: read
+concurrency:
+  group: benchboard-${{ github.event.pull_request.number || 'nightly' }}
+  cancel-in-progress: false
+jobs:
+  measure:
+    # Enable only after configuring the isolated benchmark runner and environment.
+    if: vars.BENCHBOARD_ENABLED == 'true'
+    runs-on: [self-hosted, linux, benchboard]
+    environment: benchmark-runner
+    timeout-minutes: 120
+    env:
+      BENCHBOARD_URL: ${{ vars.BENCHBOARD_URL }}
+      BENCHBOARD_CPU: ${{ vars.BENCHBOARD_CPU }}
+      BENCHBOARD_MACHINE: ${{ vars.BENCHBOARD_MACHINE }}
+      BENCHBOARD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      BENCHBOARD_RUN_ID: tir-${{ github.run_id }}-${{ github.run_attempt }}
+      BENCHBOARD_KIND: ${{ github.event_name == 'pull_request' && 'candidate' || 'nightly' }}
+      BENCHBOARD_BRANCH: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.BENCHBOARD_REPOSITORY }}
+          ref: ${{ vars.BENCHBOARD_REF }}
+          path: .benchboard
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm ci --prefix .benchboard
+      - name: Collect compile, runtime and microbenchmarks
+        env:
+          BENCHBOARD_CLI: ${{ github.workspace }}/.benchboard/cli/main.ts
+          BENCHBOARD_TSX: ${{ github.workspace }}/.benchboard/node_modules/.bin/tsx
+        run: bash .benchboard/examples/tir/.github/scripts/benchboard-run.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: benchboard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            benchboard-run.json
+            benchboard-results.*/
+          if-no-files-found: error
+      - name: Compare candidate with latest compatible nightly
+        if: github.event_name == 'pull_request'
+        run: .benchboard/node_modules/.bin/tsx .benchboard/cli/main.ts check --run benchboard-run.json --branch master --threshold 5
+  publish:
+    # A separate hosted job keeps the write credential away from benchmark code.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: measure
+    runs-on: ubuntu-24.04
+    environment: benchmark-publish
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.BENCHBOARD_REPOSITORY }}
+          ref: ${{ vars.BENCHBOARD_REF }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm ci
+      - uses: actions/download-artifact@v7
+        with:
+          name: benchboard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: incoming
+      - name: Check nightly against its predecessor
+        id: comparison
+        continue-on-error: true
+        env:
+          BENCHBOARD_URL: ${{ vars.BENCHBOARD_URL }}
+        shell: bash
+        run: |
+          set +e
+          node --import tsx cli/main.ts check --run incoming/benchboard-run.json --branch master --threshold 5 > comparison.json
+          status=$?
+          set -e
+          cat comparison.json
+          if [ "$status" -eq 2 ] && python3 -c 'import json; r=json.load(open("comparison.json")); assert r["status"] == "incomparable" and r["baselineId"] is None and r["reason"] == "No matching nightly baseline"'; then
+            echo 'Starting a new measurement baseline.'
+            exit 0
+          fi
+          exit "$status"
+      - name: Store nightly baseline
+        env:
+          BENCHBOARD_URL: ${{ vars.BENCHBOARD_URL }}
+          BENCHBOARD_TOKEN: ${{ secrets.BENCHBOARD_TOKEN }}
+        run: npm run cli -- submit --run incoming/benchboard-run.json
+      - name: Report nightly regression
+        if: steps.comparison.outcome == 'failure'
+        run: exit 1

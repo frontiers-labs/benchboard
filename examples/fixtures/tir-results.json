@@ -1,0 +1,38 @@
+{
+  "schema": 3,
+  "namespace": "fcc/programs",
+  "engine": "native",
+  "environment": {
+    "os": "linux",
+    "architecture": "x86_64",
+    "kernel": "6.14.0",
+    "cpu_model": "Example CPU",
+    "cpu": 2,
+    "hostname": "runner-a",
+    "allowed_cpus": [0, 1, 2, 3],
+    "applied_cpus": [2],
+    "subprocess_environment": { "LC_ALL": "C" },
+    "build": { "profile": "bench", "opt_level": "3", "target": "x86_64-unknown-linux-gnu", "rustflags": "", "rustc": "rustc 1.90.0" }
+  },
+  "provenance": { "revision": "0123456789abcdef", "dirty": "", "executable": "/tmp/fcc", "executable_sha256": "sha256-example", "arguments": ["--engine", "native"] },
+  "status": "complete",
+  "cases": [
+    {
+      "id": "fcc/dhrystone/source/O2/compile/dhry_1",
+      "metadata": { "workload": { "compiler": "fcc", "source": "dhrystone", "flags": ["-O2"], "reference_compiler_hash": "gcc-hash", "reference_compiler_version": "gcc 14.2", "provenance": { "compiler_path": "/usr/bin/fcc", "compiler_hash": "fcc-hash" } }, "trace_children": false },
+      "gate": true,
+      "samples": [
+        { "latency": 1000000, "user_cpu_ns": 900000, "system_cpu_ns": 20000, "peak_process_rss_bytes": 123456 },
+        { "latency": 980000, "user_cpu_ns": 880000, "system_cpu_ns": 22000, "peak_process_rss_bytes": 120000 }
+      ],
+      "summary": { "latency": 990000, "latency_mad_ns": 10000, "user_cpu_ns": 890000, "system_cpu_ns": 21000, "peak_process_rss_bytes": 123456 }
+    },
+    {
+      "id": "fcc/dhrystone/source/O2/run",
+      "metadata": { "workload": { "compiler": "fcc", "source": "dhrystone", "args": ["100000000"] }, "trace_children": false },
+      "gate": true,
+      "samples": [ { "latency": 4000000, "user_cpu_ns": 3900000, "system_cpu_ns": 30000, "peak_process_rss_bytes": 130000 }, { "latency": 3900000, "user_cpu_ns": 3800000, "system_cpu_ns": 25000, "peak_process_rss_bytes": 129000 } ],
+      "summary": { "latency": 3950000, "user_cpu_ns": 3850000, "system_cpu_ns": 27500, "peak_process_rss_bytes": 130000, "latency_mad_ns": 50000 }
+    }
+  ]
+}

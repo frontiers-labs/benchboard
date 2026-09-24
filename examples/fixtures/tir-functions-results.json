@@ -1,0 +1,22 @@
+{
+  "schema": 3,
+  "namespace": "fcc/codegen",
+  "engine": "native",
+  "environment": {
+    "os": "linux", "architecture": "x86_64", "kernel": "6.14.0", "cpu_model": "Example CPU", "cpu": 2,
+    "hostname": "runner-a", "allowed_cpus": [0, 1, 2, 3], "applied_cpus": [2],
+    "subprocess_environment": { "LC_ALL": "C" },
+    "build": { "profile": "bench", "opt_level": "3", "target": "x86_64-unknown-linux-gnu", "rustflags": "", "rustc": "rustc 1.90.0" }
+  },
+  "provenance": { "revision": "0123456789abcdef", "dirty": "", "executable": "/tmp/codegen", "executable_sha256": "sha256-codegen", "arguments": [] },
+  "status": "complete",
+  "cases": [
+    {
+      "id": "fcc/codegen/codegen/ast_to_ir",
+      "metadata": { "scope": "function", "contract": 1, "bytes_per_iteration": null, "fixed_iterations": 0, "sample_time_ms": 100 },
+      "gate": false,
+      "samples": [{ "latency": 3300, "batch_elapsed_ns": 3300000, "iterations": 1000 }, { "latency": 3200, "batch_elapsed_ns": 3200000, "iterations": 1000 }],
+      "summary": { "latency": 3250, "latency_mad_ns": 50, "iterations": 1000, "batch_elapsed_ns": 3250000 }
+    }
+  ]
+}
