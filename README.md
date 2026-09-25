@@ -23,6 +23,8 @@ npm run dev
 
 Open `http://127.0.0.1:5173/` to view submitted runs. The dashboard uses compact Changes, Trends and Results views. Select a suite and metric, compare revisions, and open row details for history and provenance.
 
+For Cachegrind runs, the default metric is instructions executed. Cache and branch counts are simulated event counts, not elapsed time. The dashboard names each counter and shows Clang/GCC reference rows and ratios when the run includes them.
+
 The dashboard reads the API directly. An empty database shows an empty state. The selected view persists in the URL and browser storage. Set `VITE_API_URL` before building to change the API origin.
 
 For access from other machines on your tailnet, initialize D1 first, then run `npm run dev:tailscale`. It binds both services to the Tailscale IPv4 address and configures the browser to use the same hostname for the API. The CLI accepts trusted private HTTP endpoints only with `BENCHBOARD_ALLOW_HTTP=1`.
