@@ -75,7 +75,7 @@ test('the data branch accumulates runs and reports regressions against the previ
   assert.equal(regressed.outputs.regressed, 'true');
   assert.equal(regressed.outputs.title, 'perf: fcc/dhrystone/compile/dhry_1 instructions +100.00% at cccccccc and 1 more');
   const rows = regressed.report.split('\n').filter(line => line.startsWith('| `'));
-  assert.equal(rows[0], '| `fcc/dhrystone/compile/dhry_1` | Instructions | 2.394G | 4.788G | +100.00% |');
+  assert.equal(rows[0], '| `fcc/dhrystone/compile/dhry_1` | Instructions | 2.394 bn | 4.788 bn | +100.00% |');
   assert.match(rows[1], /fcc\/dhrystone\/run.*\+5\.00%/);
   assert.equal(rows.length, 2, 'the ungated Dr increase is not in the report');
   assert.ok(regressed.report.includes(`https://github.com/owner/project/compare/${'b'.repeat(40)}...${'c'.repeat(40)}`));

@@ -91,6 +91,7 @@ function setMetrics(runs) {
   const ordered = [...gates, ...[...metrics.keys()].filter(metric => !gates.includes(metric))];
   $('metric').replaceChildren(...ordered.map(metric => el('option', { value: metric, selected: metric === state.metric ? '' : null }, metricLabel(metric))));
 }
+const guide = text => el('p', { class: 'about' }, text);
 const description = metric => {
   const text = metrics.get(metric)?.description;
   return text ? el('p', { class: 'about' }, el('strong', {}, metricLabel(metric)), ` · ${text}`) : '';
@@ -157,15 +158,17 @@ async function renderVersus() {
     }
   }
   if (!tiles.length) {
-    content.replaceChildren(el('p', { class: 'message' }, groups.length ? 'No benchmark matches the filter.' : 'This run has no benchmark measured for several variants.'));
+    content.replaceChildren(el('p', { class: 'message' }, groups.length ? 'No benchmark matches the filter.'
+      : 'This run measured every benchmark in one variant only, so there is nothing to set side by side. The view fills in once a run records variants, such as one program built by several compilers.'));
     return;
   }
+  const subjects = new Intl.ListFormat('en').format(new Set(groups.map(group => group.subject)));
   content.replaceChildren(
     el('p', { class: 'summary' },
-      el('strong', {}, new Intl.ListFormat('en').format(new Set(groups.map(group => group.subject)))), ' against ',
+      el('strong', {}, subjects), ' against ',
       new Intl.ListFormat('en').format(new Set(groups.flatMap(group => group.variants.slice(1)))), ' at ',
       el('span', { class: 'commits' }, commitLink(head), head.subject ? ` · ${head.subject}` : ''),
-      '. Lower is better for every metric, so a ratio above 1× means the reference is ahead.'),
+      `. Each ratio is the value of ${subjects} divided by the value of the reference. Lower is better for every metric, so 2.00× means ${subjects} needs twice as much as the reference, and 0.50× means half.`),
     el('div', { class: 'charts' }, ...tiles),
     ...sections.filter(Boolean));
 }
@@ -195,7 +198,8 @@ async function renderCompare() {
     ` in ${metricLabel(state.metric).toLowerCase()} at a ${head.threshold ?? 2}% threshold. `,
     el('span', { class: 'commits' }, commitLink(base), ' to ', commitLink(head), head.subject ? ` · ${head.subject}` : ''),
   );
-  const nodes = [summary, description(state.metric)];
+  const percent = head.threshold ?? 2;
+  const nodes = [summary, description(state.metric), guide(`Each row is one benchmark at the base and the head commit. ▲ regressed means its value rose by more than ${percent}%, and ▼ improved means it fell by more than ${percent}%. Click a row to see its history.`)];
   if (outcome.envChanged) {
     nodes.push(el('p', { class: 'notice' }, `The measurement environment changed between these runs, from "${base.env_key}" to "${head.env_key}". Differences may come from the toolchain.`));
   }
@@ -230,7 +234,7 @@ async function renderHistory() {
   for (const run of runs) for (const [id, measures] of Object.entries(run.results)) if (state.metric in measures) reported.add(id);
   const line = (id, name = '', slot = 0) => ({ name, slot, points: series(runs, id, state.metric) });
   const options = { runs, first, format: value => format(value, state.metric) };
-  const nodes = [description(state.metric)];
+  const nodes = [description(state.metric), guide('Each chart follows one benchmark over the selected runs, oldest on the left. Hover a point to see its commit, and click it to compare that run with the one before.')];
   // A benchmark measured for several variants gets one chart with a line per variant.
   const tags = Object.assign({}, ...runs.map(run => run.variants));
   const groups = versusGroups(tags);
@@ -246,7 +250,7 @@ async function renderHistory() {
     nodes.push(el('h2', {}, group));
     nodes.push(el('div', { class: 'charts' }, ...members.map(id => chart({ ...options, title: id === group ? id : id.slice(group.length + 1), series: [line(id)] }))));
   }
-  if (nodes.length === 1) nodes.push(el('p', { class: 'message' }, 'No benchmark matches the filter.'));
+  if (nodes.length === 2) nodes.push(el('p', { class: 'message' }, 'No benchmark matches the filter.'));
   content.replaceChildren(...nodes);
 }
 

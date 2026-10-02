@@ -11,13 +11,13 @@ Your benchmark job writes one or more results files:
 ```json
 {
   "metrics": [
-    { "key": "Ir", "label": "Instructions", "unit": "count", "description": "Instructions executed under Cachegrind." },
-    { "key": "latency", "label": "Wall time", "unit": "ns" }
+    { "key": "instructions", "label": "Instructions", "unit": "count", "description": "CPU instructions executed, counted by Cachegrind. Lower is better." },
+    { "key": "wall_time", "label": "Wall time", "unit": "ns" }
   ],
   "results": {
-    "fcc/dhrystone/O2/run": { "Ir": { "value": 43700000000 }, "latency": { "value": 912000000, "lower_value": 905000000, "upper_value": 919000000 } },
-    "gcc/dhrystone/O2/run": { "latency": { "value": 401000000 } },
-    "pbqp/dense_search/16": { "Ir": { "value": 1203394 } }
+    "fcc/dhrystone/O2/run": { "instructions": { "value": 43700000000 }, "wall_time": { "value": 912000000, "lower_value": 905000000, "upper_value": 919000000 } },
+    "gcc/dhrystone/O2/run": { "wall_time": { "value": 401000000 } },
+    "pbqp/dense_search/16": { "instructions": { "value": 1203394 } }
   },
   "variants": {
     "fcc/dhrystone/O2/run": { "benchmark": "dhrystone/O2", "group": "Run", "variant": "fcc", "subject": true },
@@ -28,7 +28,7 @@ Your benchmark job writes one or more results files:
 
 Only `results` is required. It maps a benchmark id to its metrics, and each metric to a `value`. `lower_value` and `upper_value` are an optional spread, shown as a percentage next to the value.
 
-`metrics` gives a metric a readable label, a unit and a description. The page lists metrics in this order and formats `ns` as time, `bytes` as binary sizes, and anything else as a count. A metric without a definition is shown by its key.
+`metrics` gives a metric a readable label, a unit and a description. The page shows the description next to the values, so write it for a reader who has not seen the metric before: what was measured, how, and that lower is better. The page lists metrics in this order and formats `ns` as time, `bytes` as binary sizes, and anything else as a count. A metric without a definition is shown by its key.
 
 `variants` marks results that measure the same benchmark in different ways, such as with different compilers. Results that share `group` and `benchmark` are compared with each other. The variant with `subject: true` is your project, and the others are its references.
 
@@ -53,7 +53,7 @@ record:
     - uses: frontiers-labs/benchboard@COMMIT_SHA
       with:
         results: results/**/summary.json
-        gate-metrics: Ir
+        gate-metrics: instructions
         threshold: 2
         env-key: ${{ needs.benchmarks.outputs.environment }}
 ```
