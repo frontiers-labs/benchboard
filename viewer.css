@@ -1,0 +1,100 @@
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --surface-raised: #ffffff;
+  --border: #e3e2de;
+  --grid: #ecebe7;
+  --text: #0b0b0b;
+  --text-secondary: #52514e;
+  --series: #2a78d6;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: #1a1a19;
+    --surface-raised: #232322;
+    --border: #383835;
+    --grid: #2b2b29;
+    --text: #ffffff;
+    --text-secondary: #c3c2b7;
+    --series: #3987e5;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--text); line-height: 1.45; }
+a { color: inherit; }
+code, .mono, td.number, th.number { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+header { display: flex; align-items: baseline; gap: 24px; padding: 14px 20px 0; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 16px; font-weight: 650; }
+h1 a { color: var(--text-secondary); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 2px; }
+nav button {
+  padding: 6px 12px; border: 0; border-bottom: 2px solid transparent; background: none;
+  color: var(--text-secondary); font: inherit; cursor: pointer;
+}
+nav button[aria-current="page"] { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
+
+#filters {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end;
+  padding: 12px 20px; border-block: 1px solid var(--border); margin-top: 10px;
+}
+#filters label { display: grid; gap: 3px; color: var(--text-secondary); font-size: 12px; }
+#filters label.grow { flex: 1 1 200px; }
+#filters label.check:not([hidden]) { display: flex; align-items: center; gap: 6px; padding-bottom: 6px; }
+#filters select, #filters input[type="search"] {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface-raised); color: var(--text); font: inherit; max-width: 46ch;
+}
+#filters label[hidden] { display: none; }
+
+main { padding: 16px 20px 48px; }
+.message { color: var(--text-secondary); }
+.summary { margin: 0 0 12px; }
+.summary .commits { color: var(--text-secondary); }
+.notice { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; margin: 0 0 12px; }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+th { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+tbody tr { cursor: pointer; }
+tbody tr:hover, tbody tr:focus-visible { background: var(--surface-raised); outline: none; }
+/* Status is carried by the glyph and its label; the number stays in text ink. */
+.status { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.status::before { font-size: 10px; }
+.status.regressed::before { content: "▲"; color: var(--critical); }
+.status.improved::before { content: "▼"; color: var(--good); }
+.status.unchanged::before { content: "–"; color: var(--text-secondary); }
+.status.new::before, .status.missing::before { content: "•"; color: var(--text-secondary); }
+
+h2 { margin: 22px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+h2:first-child { margin-top: 0; }
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.chart {
+  padding: 10px 12px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised);
+}
+.chart h3 { margin: 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.chart .latest { margin: 2px 0 6px; color: var(--text-secondary); font-size: 12px; display: flex; gap: 8px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; cursor: crosshair; }
+.chart svg:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+.chart .line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .env { stroke: var(--text-secondary); stroke-width: 1; }
+.chart .cross { stroke: var(--text-secondary); stroke-width: 1; }
+.chart .dot { fill: var(--series); stroke: var(--surface-raised); stroke-width: 2; }
+.chart text { fill: var(--text-secondary); font-size: 10px; }
+
+#tooltip {
+  position: fixed; z-index: 10; max-width: 320px; padding: 8px 10px; pointer-events: none;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 14%); font-size: 12px;
+}
+#tooltip strong { display: block; font-size: 13px; }
+#tooltip span { display: block; color: var(--text-secondary); }

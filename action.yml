@@ -1,0 +1,71 @@
+name: Benchboard record
+description: Append benchmark results to a data branch, compare with the previous run, and open an issue on regression.
+
+inputs:
+  results:
+    description: Bencher Metric Format files to record. Globs are allowed, one per line or space separated.
+    required: true
+  gate-metrics:
+    description: Comma-separated metric names that can mark the run regressed. Other metrics are recorded and shown only.
+    default: ''
+  threshold:
+    description: Largest allowed increase of a gated metric, in percent.
+    default: '2'
+  env-key:
+    description: Identity of the measurement environment, such as compiler and Valgrind versions. A run whose key differs from the previous run is recorded without gating.
+    default: ''
+  data-branch:
+    description: Branch that stores the run history.
+    default: perf-data
+  commit:
+    description: Commit the results belong to.
+    default: ${{ github.sha }}
+  viewer-url:
+    description: Benchboard page linked from the report.
+    default: https://frontiers-labs.github.io/benchboard/
+  issue-label:
+    description: Label for the regression issue. Leave empty to open no issue.
+    default: perf
+  token:
+    description: Token with contents write for the data branch and issues write for the regression issue.
+    default: ${{ github.token }}
+
+outputs:
+  regressed:
+    description: Whether a gated metric rose above the threshold.
+    value: ${{ steps.record.outputs.regressed }}
+  report:
+    description: Path of the markdown comparison report.
+    value: ${{ steps.record.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - id: record
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        BENCHBOARD_RESULTS: ${{ inputs.results }}
+        BENCHBOARD_GATE_METRICS: ${{ inputs.gate-metrics }}
+        BENCHBOARD_THRESHOLD: ${{ inputs.threshold }}
+        BENCHBOARD_ENV_KEY: ${{ inputs.env-key }}
+        BENCHBOARD_DATA_BRANCH: ${{ inputs.data-branch }}
+        BENCHBOARD_COMMIT: ${{ inputs.commit }}
+        BENCHBOARD_VIEWER_URL: ${{ inputs.viewer-url }}
+        BENCHBOARD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        BENCHBOARD_REPORT: ${{ runner.temp }}/benchboard-report.md
+      run: |
+        bash "$GITHUB_ACTION_PATH/publish.sh"
+        echo "report=$BENCHBOARD_REPORT" >> "$GITHUB_OUTPUT"
+        cat "$BENCHBOARD_REPORT" >> "$GITHUB_STEP_SUMMARY"
+    - if: steps.record.outputs.regressed == 'true' && inputs.issue-label != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+        LABEL: ${{ inputs.issue-label }}
+        TITLE: ${{ steps.record.outputs.title }}
+        REPORT: ${{ steps.record.outputs.report }}
+      run: |
+        gh label create "$LABEL" --description "Performance regression found by benchboard" --color d93f0b 2>/dev/null || true
+        gh issue create --title "$TITLE" --body-file "$REPORT" --label "$LABEL"
