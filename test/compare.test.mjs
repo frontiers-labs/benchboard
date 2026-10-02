@@ -68,6 +68,10 @@ test('values and deltas format for a table', () => {
   assert.equal(formatValue(123), '123');
   assert.equal(formatValue(0.5), '0.5000');
   assert.equal(formatValue(null), 'n/a');
+  assert.equal(formatValue(1_234_500_000, 'ns'), '1.234 s');
+  assert.equal(formatValue(87_650, 'ns'), '87.65 µs');
+  assert.equal(formatValue(52_428_800, 'bytes'), '50.00 MiB');
+  assert.equal(formatValue(9038000000, 'count'), '9.038G');
   assert.equal(formatDelta(1.0416), '+104.16%');
   assert.equal(formatDelta(-0.7351), '-73.51%');
   assert.equal(formatDelta(null), 'n/a');

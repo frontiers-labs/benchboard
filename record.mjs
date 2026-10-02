@@ -34,17 +34,27 @@ const threshold = Number(args.threshold);
 if (!(threshold >= 0)) fail(`--threshold must be a nonnegative percentage: ${args.threshold}`);
 const gateMetrics = args['gate-metrics'].split(',').map(metric => metric.trim()).filter(Boolean);
 
+// One benchmark may come from several files as long as each metric comes from one.
 const results = {};
+const metrics = new Map();
+const variants = {};
 for (const file of args.results) {
-  for (const [id, metrics] of Object.entries(JSON.parse(readFileSync(file, 'utf8')))) {
-    if (id in results) fail(`${file}: benchmark ${id} already came from another results file`);
-    for (const [metric, measure] of Object.entries(metrics)) {
+  const summary = JSON.parse(readFileSync(file, 'utf8'));
+  if (typeof summary.results !== 'object' || summary.results === null) fail(`${file}: no "results" object`);
+  for (const [id, measures] of Object.entries(summary.results)) {
+    results[id] ??= {};
+    for (const [metric, measure] of Object.entries(measures)) {
       if (!Number.isFinite(measure?.value)) fail(`${file}: ${id} ${metric} has no numeric value`);
+      if (metric in results[id]) fail(`${file}: ${id} ${metric} already came from another results file`);
+      results[id][metric] = measure;
     }
-    results[id] = metrics;
   }
+  for (const metric of summary.metrics ?? []) if (!metrics.has(metric.key)) metrics.set(metric.key, metric);
+  Object.assign(variants, summary.variants);
 }
 if (!Object.keys(results).length) fail('results contain no benchmarks');
+const label = metric => metrics.get(metric)?.label ?? metric;
+const unit = metric => metrics.get(metric)?.unit;
 
 const run = {
   commit: args.commit,
@@ -54,6 +64,8 @@ const run = {
   env_key: args['env-key'],
   gate_metrics: gateMetrics,
   threshold,
+  metrics: [...metrics.values()],
+  variants,
   results,
 };
 
@@ -96,7 +108,7 @@ function render(base, run, outcome) {
   const links = [];
   if (args.repo && base.commit !== run.commit) links.push(`[commits in range](https://github.com/${args.repo}/compare/${base.commit}...${run.commit})`);
   if (args['viewer-url']) {
-    const query = new URLSearchParams({ repo: args.repo, branch: args['data-branch'], base: base.commit, head: run.commit });
+    const query = new URLSearchParams({ repo: args.repo, branch: args['data-branch'], view: 'compare', base: base.commit, head: run.commit });
     links.push(`[compare page](${args['viewer-url']}?${query})`);
   }
   if (run.run_url) links.push(`[workflow run](${run.run_url})`);
@@ -105,16 +117,16 @@ function render(base, run, outcome) {
     if (!rows.length) return;
     lines.push(`### ${heading}`, '', '| Benchmark | Metric | Before | After | Change |', '| --- | --- | ---: | ---: | ---: |');
     for (const row of rows.slice(0, REPORT_ROWS)) {
-      lines.push(`| \`${row.id}\` | ${row.metric} | ${formatValue(row.base)} | ${formatValue(row.head)} | ${formatDelta(row.delta)} |`);
+      lines.push(`| \`${row.id}\` | ${label(row.metric)} | ${formatValue(row.base, unit(row.metric))} | ${formatValue(row.head, unit(row.metric))} | ${formatDelta(row.delta)} |`);
     }
     if (rows.length > REPORT_ROWS) lines.push('', `${rows.length - REPORT_ROWS} more rows are on the compare page.`);
     lines.push('');
   };
   table(`Regressed above ${run.threshold}%`, regressed);
   table(`Improved above ${run.threshold}%`, improved);
-  const names = status => [...new Set(outcome.rows.filter(row => row.status === status).map(row => row.id))];
-  for (const [status, label] of [['new', 'New benchmarks'], ['missing', 'Benchmarks no longer reported']]) {
-    const ids = names(status);
+  // A benchmark that gains or loses a metric is neither new nor gone.
+  const absent = (from, other) => Object.keys(from.results).filter(id => !(id in other.results)).sort();
+  for (const [ids, label] of [[absent(run, base), 'New benchmarks'], [absent(base, run), 'Benchmarks no longer reported']]) {
     if (ids.length) lines.push(`${label}: ${ids.slice(0, REPORT_ROWS).map(id => `\`${id}\``).join(', ')}${ids.length > REPORT_ROWS ? `, and ${ids.length - REPORT_ROWS} more` : ''}`, '');
   }
   if (!regressed.length && !improved.length) lines.push(`No gated metric moved more than ${run.threshold}%.`, '');
@@ -122,7 +134,7 @@ function render(base, run, outcome) {
   if (outcome.regressed) {
     const worst = regressed[0];
     const others = new Set(regressed.map(row => row.id)).size - 1;
-    title = `perf: ${worst.id} ${worst.metric} ${formatDelta(worst.delta)} at ${short(run.commit)}${others > 0 ? ` and ${others} more` : ''}`;
+    title = `perf: ${worst.id} ${label(worst.metric).toLowerCase()} ${formatDelta(worst.delta)} at ${short(run.commit)}${others > 0 ? ` and ${others} more` : ''}`;
   }
   return { title, body: lines.join('\n') };
 }

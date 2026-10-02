@@ -1,19 +1,38 @@
 # Benchboard
 
-Benchboard tracks benchmark results over time without a server. A GitHub Action appends each run to a branch of your repository, compares it with the previous run, and opens an issue when a gated metric rises. A static page reads that branch and shows a compare table and history charts.
+Benchboard tracks benchmark results over time without a server. A GitHub Action appends each run to a branch of your repository, compares it with the previous run, and opens an issue when a gated metric rises. A static page reads that branch and shows three views: your project against reference implementations, a compare table for two commits, and history charts.
 
-Benchboard does not know your benchmarks. It records whatever benchmark and metric names appear in the results, so adding a benchmark needs no change here.
+Benchboard does not know your benchmarks. The results name their own benchmarks, metrics and variants, so adding one needs no change here.
 
 ## Record runs from CI
 
-Your benchmark job writes one or more [Bencher Metric Format](https://bencher.dev/docs/reference/bencher-metric-format/) files:
+Your benchmark job writes one or more results files:
 
 ```json
 {
-  "fcc/dhrystone/source/O2/compile/dhry_1": { "Ir": { "value": 2394000000 } },
-  "pbqp/dense_search/16": { "Ir": { "value": 1203394 }, "Dr": { "value": 301222 } }
+  "metrics": [
+    { "key": "Ir", "label": "Instructions", "unit": "count", "description": "Instructions executed under Cachegrind." },
+    { "key": "latency", "label": "Wall time", "unit": "ns" }
+  ],
+  "results": {
+    "fcc/dhrystone/O2/run": { "Ir": { "value": 43700000000 }, "latency": { "value": 912000000, "lower_value": 905000000, "upper_value": 919000000 } },
+    "gcc/dhrystone/O2/run": { "latency": { "value": 401000000 } },
+    "pbqp/dense_search/16": { "Ir": { "value": 1203394 } }
+  },
+  "variants": {
+    "fcc/dhrystone/O2/run": { "benchmark": "dhrystone/O2", "group": "Run", "variant": "fcc", "subject": true },
+    "gcc/dhrystone/O2/run": { "benchmark": "dhrystone/O2", "group": "Run", "variant": "gcc", "subject": false }
+  }
 }
 ```
+
+Only `results` is required. It maps a benchmark id to its metrics, and each metric to a `value`. `lower_value` and `upper_value` are an optional spread, shown as a percentage next to the value.
+
+`metrics` gives a metric a readable label, a unit and a description. The page lists metrics in this order and formats `ns` as time, `bytes` as binary sizes, and anything else as a count. A metric without a definition is shown by its key.
+
+`variants` marks results that measure the same benchmark in different ways, such as with different compilers. Results that share `group` and `benchmark` are compared with each other. The variant with `subject: true` is your project, and the others are its references.
+
+Several files may report the same benchmark as long as each metric of it comes from one file. A Cachegrind job and a timing job can then cover the same ids.
 
 Add a job that passes them to the action. Pin the action to a commit.
 
@@ -33,7 +52,7 @@ record:
         path: results
     - uses: frontiers-labs/benchboard@COMMIT_SHA
       with:
-        results: results/**/summary.bmf.json
+        results: results/**/summary.json
         gate-metrics: Ir
         threshold: 2
         env-key: ${{ needs.benchmarks.outputs.environment }}
@@ -43,8 +62,8 @@ The concurrency group keeps two runs from pushing to the data branch at once. Th
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `results` | required | BMF files to record. Globs are allowed. A benchmark may appear in only one file. |
-| `gate-metrics` | none | Comma-separated metrics that can mark the run regressed. Other metrics are recorded and shown only. |
+| `results` | required | Results files to record. Globs are allowed. |
+| `gate-metrics` | none | Comma-separated metric keys that can mark the run regressed. Other metrics are recorded and shown only. |
 | `threshold` | `2` | Largest allowed increase of a gated metric, in percent. |
 | `env-key` | none | Identity of the measurement environment, such as compiler and Valgrind versions. |
 | `data-branch` | `perf-data` | Branch that stores the history. The action creates it on the first run. |
@@ -76,7 +95,7 @@ index.json                                   run list, oldest first
 runs/2026-10-01T05-25-38-000Z-d46ad60a3a78.json   one file per run
 ```
 
-A run file holds `commit`, `subject`, `time`, `run_url`, `env_key`, `gate_metrics`, `threshold`, and `results`. `results` is the merged BMF input.
+A run file holds `commit`, `subject`, `time`, `run_url`, `env_key`, `gate_metrics`, `threshold`, and the merged `metrics`, `variants` and `results` of the input files.
 
 ## View the history
 
@@ -86,12 +105,14 @@ Open `https://frontiers-labs.github.io/benchboard/?repo=OWNER/NAME`. The page re
 | --- | --- |
 | `repo` | Repository that holds the data branch. |
 | `branch` | Data branch. Defaults to `perf-data`. |
-| `view` | `compare` or `history`. |
-| `base`, `head` | Commits to compare. A prefix is enough. Defaults to the latest two runs. |
-| `metric`, `q` | Selected metric and benchmark name filter. |
+| `view` | `versus`, `compare` or `history`. Defaults to `versus` when the latest run has variants. |
+| `base`, `head` | Commits to compare. A prefix is enough. Defaults to the latest two runs. `versus` shows `head`. |
+| `metric`, `q` | Selected metric key and benchmark name filter. |
 | `data` | Base URL of a directory with the data branch layout. Use it for local data. |
 
-In the compare view, click a row to see that benchmark's history. In the history view, click a point to compare that run with the one before it.
+The versus view answers how the subject stands against its references. For each group and metric it shows the geometric mean of subject ÷ reference with its trend over the selected runs, then a table of every benchmark with each variant's value and the ratios. All metrics count as lower is better, so a ratio above 1× means the reference is ahead. Ratios of values measured on one machine stay comparable between runs even when the machines differ.
+
+In the compare view, click a row to see that benchmark's history. In the history view, a benchmark with variants gets one chart with a line per variant. Click a point to compare that run with the one before it.
 
 GitHub Pages serves the page from the root of `master`. No build step runs.
 
@@ -102,4 +123,4 @@ npm test                      # node --test, no dependencies
 python3 -m http.server 8000   # then open http://localhost:8000/?data=/path/under/server/root/
 ```
 
-`lib/compare.mjs` is shared by `record.mjs` and the page, so CI and the page classify a change the same way. `publish.sh` is the script the action runs. `test/publish.test.mjs` runs it against a local bare repository.
+`lib/compare.mjs` is shared by `record.mjs` and the page, so CI and the page classify a change the same way. `lib/versus.mjs` holds the metric definitions and the variant comparison. `publish.sh` is the script the action runs. `test/publish.test.mjs` runs it against a local bare repository.

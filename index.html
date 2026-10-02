@@ -11,17 +11,18 @@
   <header>
     <h1>benchboard <a id="repo" rel="noopener"></a></h1>
     <nav aria-label="Views">
+      <button type="button" data-view="versus">Versus</button>
       <button type="button" data-view="compare">Compare</button>
       <button type="button" data-view="history">History</button>
     </nav>
   </header>
   <form id="filters" aria-label="Filters">
-    <label>Metric <select id="metric"></select></label>
+    <label data-for="compare history">Metric <select id="metric"></select></label>
     <label class="grow">Benchmark <input id="query" type="search" placeholder="Filter by name"></label>
     <label data-for="compare">Base <select id="base"></select></label>
-    <label data-for="compare">Head <select id="head"></select></label>
+    <label data-for="compare versus">Head <select id="head"></select></label>
     <label data-for="compare" class="check"><input id="unchanged" type="checkbox"> Show unchanged</label>
-    <label data-for="history">Runs <select id="range">
+    <label data-for="history versus">Runs <select id="range">
       <option value="30">Last 30</option>
       <option value="100">Last 100</option>
       <option value="0">All</option>

@@ -3,7 +3,7 @@ description: Append benchmark results to a data branch, compare with the previou
 
 inputs:
   results:
-    description: Bencher Metric Format files to record. Globs are allowed, one per line or space separated.
+    description: Results files to record, in the format the README describes. Globs are allowed, one per line or space separated.
     required: true
   gate-metrics:
     description: Comma-separated metric names that can mark the run regressed. Other metrics are recorded and shown only.
