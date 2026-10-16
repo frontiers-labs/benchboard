@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { compare, formatDelta, formatValue } from './lib/compare.mjs';
 
 const REPORT_ROWS = 30;
+const SPREAD_ROWS = 10;
 
 const { values: args } = parseArgs({
   options: {
@@ -38,11 +39,13 @@ const gateMetrics = args['gate-metrics'].split(',').map(metric => metric.trim())
 const results = {};
 const metrics = new Map();
 const variants = {};
+const environments = {};
 for (const file of args.results) {
   const summary = JSON.parse(readFileSync(file, 'utf8'));
   if (typeof summary.results !== 'object' || summary.results === null) fail(`${file}: no "results" object`);
   for (const [id, measures] of Object.entries(summary.results)) {
     results[id] ??= {};
+    if (summary.environment) environments[id] = summary.environment;
     for (const [metric, measure] of Object.entries(measures)) {
       if (!Number.isFinite(measure?.value)) fail(`${file}: ${id} ${metric} has no numeric value`);
       if (metric in results[id]) fail(`${file}: ${id} ${metric} already came from another results file`);
@@ -66,6 +69,7 @@ const run = {
   threshold,
   metrics: [...metrics.values()],
   variants,
+  environments,
   results,
 };
 
@@ -96,9 +100,11 @@ function render(base, run, outcome) {
   if (!outcome) {
     return { title: '', body: `First recorded run at ${commitLink(run.commit)}. Nothing to compare with yet.\n` };
   }
-  const gated = outcome.rows.filter(row => row.gated);
-  const regressed = gated.filter(row => row.status === 'regressed');
-  const improved = gated.filter(row => row.status === 'improved');
+  // Without gates, every metric is reported and none opens an issue.
+  const considered = run.gate_metrics.length ? outcome.rows.filter(row => row.gated) : outcome.rows;
+  const regressed = considered.filter(row => row.status === 'regressed');
+  const improved = considered.filter(row => row.status === 'improved');
+  const moved = considered.filter(row => row.status === 'environment');
   const lines = [`Compared ${commitLink(run.commit)} with the previous run at ${commitLink(base.commit)}.`];
   if (run.subject) lines.push(`Commit: ${run.subject}`);
   lines.push('');
@@ -124,12 +130,26 @@ function render(base, run, outcome) {
   };
   table(`Regressed above ${run.threshold}%`, regressed);
   table(`Improved above ${run.threshold}%`, improved);
+  table('Changed on another machine', moved);
+  const modal = Object.entries(run.results).flatMap(([id, measures]) => Object.entries(measures)
+    .filter(([, measure]) => measure.modality && measure.modality !== 'unimodal')
+    .map(([metric, measure]) => `\`${id}\` ${label(metric).toLowerCase()} (${measure.modality})`));
+  if (modal.length) lines.push(`Several modes, where one value hides part of the distribution: ${modal.slice(0, REPORT_ROWS).join(', ')}${modal.length > REPORT_ROWS ? `, and ${modal.length - REPORT_ROWS} more` : ''}`, '');
+  const spread = Object.entries(run.results).flatMap(([id, measures]) => Object.entries(measures)
+    .filter(([, measure]) => measure.value > 0 && Number.isFinite(measure.lower_value) && Number.isFinite(measure.upper_value))
+    .map(([metric, measure]) => ({ id, metric, width: (measure.upper_value - measure.lower_value) / measure.value })))
+    .sort((x, y) => y.width - x.width).slice(0, SPREAD_ROWS);
+  if (spread.length) {
+    lines.push('### Widest spread', '', '| Benchmark | Metric | Spread |', '| --- | --- | ---: |');
+    for (const row of spread) lines.push(`| \`${row.id}\` | ${label(row.metric)} | ${(row.width * 100).toFixed(1)}% |`);
+    lines.push('');
+  }
   // A benchmark that gains or loses a metric is neither new nor gone.
   const absent = (from, other) => Object.keys(from.results).filter(id => !(id in other.results)).sort();
   for (const [ids, label] of [[absent(run, base), 'New benchmarks'], [absent(base, run), 'Benchmarks no longer reported']]) {
     if (ids.length) lines.push(`${label}: ${ids.slice(0, REPORT_ROWS).map(id => `\`${id}\``).join(', ')}${ids.length > REPORT_ROWS ? `, and ${ids.length - REPORT_ROWS} more` : ''}`, '');
   }
-  if (!regressed.length && !improved.length) lines.push(`No gated metric moved more than ${run.threshold}%.`, '');
+  if (!regressed.length && !improved.length) lines.push(`No ${run.gate_metrics.length ? 'gated ' : ''}metric moved more than ${run.threshold}%.`, '');
   let title = '';
   if (outcome.regressed) {
     const worst = regressed[0];

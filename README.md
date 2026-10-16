@@ -1,6 +1,6 @@
 # Benchboard
 
-Benchboard tracks benchmark results over time without a server. A GitHub Action appends each run to a branch of your repository, compares it with the previous run, and opens an issue when a gated metric rises. A static page reads that branch and shows three views: your project against reference implementations, a compare table for two commits, and history charts.
+Benchboard tracks benchmark results over time without a server. A GitHub Action appends each run to a branch of your repository, compares it with the previous run, and can open an issue when a gated metric rises. A static page reads that branch and shows three views: your project against reference implementations, a compare table for two commits, and history charts.
 
 Benchboard does not know your benchmarks. The results name their own benchmarks, metrics and variants, so adding one needs no change here.
 
@@ -15,10 +15,11 @@ Your benchmark job writes one or more results files:
     { "key": "wall_time", "label": "Wall time", "unit": "ns" }
   ],
   "results": {
-    "fcc/dhrystone/O2/run": { "instructions": { "value": 43700000000 }, "wall_time": { "value": 912000000, "lower_value": 905000000, "upper_value": 919000000 } },
+    "fcc/dhrystone/O2/run": { "instructions": { "value": 43700000000 }, "wall_time": { "value": 912000000, "lower_value": 905000000, "upper_value": 919000000, "samples": [905000000, 912000000, 919000000], "modality": "unimodal" } },
     "gcc/dhrystone/O2/run": { "wall_time": { "value": 401000000 } },
     "pbqp/dense_search/16": { "instructions": { "value": 1203394 } }
   },
+  "environment": "x86_64 AMD EPYC 7763",
   "variants": {
     "fcc/dhrystone/O2/run": { "benchmark": "dhrystone/O2", "group": "Run", "variant": "fcc", "subject": true },
     "gcc/dhrystone/O2/run": { "benchmark": "dhrystone/O2", "group": "Run", "variant": "gcc", "subject": false }
@@ -26,7 +27,9 @@ Your benchmark job writes one or more results files:
 }
 ```
 
-Only `results` is required. It maps a benchmark id to its metrics, and each metric to a `value`. `lower_value` and `upper_value` are an optional spread, shown as a percentage next to the value.
+Only `results` is required. It maps a benchmark id to its metrics, and each metric to a `value`. `lower_value` and `upper_value` are an optional spread, shown as a percentage next to the value. `samples` are the raw measurements behind the value; when two runs both have them, a change must pass a Mann-Whitney rank-sum test at p < 0.01 before it counts. `modality` is `unimodal`, `bimodal` or `multimodal`, and the page and the report flag every value whose samples form several modes.
+
+`environment` names the machine that measured every benchmark of the file, such as its CPU model. History charts draw one line per machine, and a change between runs on different machines gets the status `environment` instead of a verdict.
 
 `metrics` gives a metric a readable label, a unit and a description. The page shows the description next to the values, so write it for a reader who has not seen the metric before: what was measured, how, and that lower is better. The page lists metrics in this order and formats `ns` as time, `bytes` as binary sizes, and anything else as a count. A metric without a definition is shown by its key.
 
@@ -76,7 +79,7 @@ The action writes the comparison to the job summary and sets the outputs `regres
 
 ### What counts as a regression
 
-Each run is compared with the run recorded before it. The run is regressed when a gated metric of any benchmark rises by more than the threshold. The issue names the worst benchmark, lists every regressed and improved gated row, and links the commit range and the compare page.
+Each run is compared with the run recorded before it. The run is regressed when a gated metric of any benchmark rises by more than the threshold. Without `gate-metrics`, no run is regressed: the report lists every metric that moved past the threshold, the values with several modes, and the ten widest spreads. The issue names the worst benchmark, lists every regressed and improved gated row, and links the commit range and the compare page.
 
 Three cases are recorded without opening an issue:
 

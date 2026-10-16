@@ -89,6 +89,7 @@ tbody tr:hover, tbody tr:focus-visible { background: var(--surface-raised); outl
 .status.improved::before, .status.ahead::before { content: "▼"; color: var(--good); }
 .status.unchanged::before, .status.level::before { content: "–"; color: var(--text-secondary); }
 .status.new::before, .status.missing::before { content: "•"; color: var(--text-secondary); }
+.status.environment::before { content: "↔"; color: var(--text-secondary); }
 
 .spread { color: var(--text-secondary); font-size: 11px; }
 tr.mean { cursor: default; font-weight: 600; }

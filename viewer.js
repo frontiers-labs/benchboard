@@ -1,4 +1,4 @@
-import { compare, formatDelta, formatValue } from './lib/compare.mjs';
+import { SIGNIFICANCE, compare, formatDelta, formatValue } from './lib/compare.mjs';
 import { groupIds, resolveRun, series } from './lib/history.mjs';
 import { meanRatio, metricIndex, ratio, versusGroups } from './lib/versus.mjs';
 
@@ -179,6 +179,11 @@ function spread(measure) {
   return el('span', { class: 'spread' }, ` ±${((measure.upper_value - measure.lower_value) / 2 / measure.value * 100).toFixed(1)}%`);
 }
 
+/** A note when the samples of a value form several modes, so the value alone misleads. */
+function modes(measure) {
+  return measure?.modality && measure.modality !== 'unimodal' ? el('span', { class: 'spread', title: 'The samples form several modes.' }, ` ${measure.modality}`) : '';
+}
+
 async function renderCompare() {
   if (index.length < 2) {
     content.replaceChildren(el('p', { class: 'message' }, 'Two runs are needed for a comparison. Only one is recorded so far.'));
@@ -194,12 +199,13 @@ async function renderCompare() {
 
   const summary = el('p', { class: 'summary' },
     el('strong', {}, `${count('regressed')} regressed, ${count('improved')} improved, ${count('unchanged')} unchanged`),
+    count('environment') ? `, ${count('environment')} changed on another machine` : '',
     count('new') || count('missing') ? `, ${count('new')} new, ${count('missing')} missing` : '',
     ` in ${metricLabel(state.metric).toLowerCase()} at a ${head.threshold ?? 2}% threshold. `,
     el('span', { class: 'commits' }, commitLink(base), ' to ', commitLink(head), head.subject ? ` · ${head.subject}` : ''),
   );
   const percent = head.threshold ?? 2;
-  const nodes = [summary, description(state.metric), guide(`Each row is one benchmark at the base and the head commit. ▲ regressed means its value rose by more than ${percent}%, and ▼ improved means it fell by more than ${percent}%. Click a row to see its history.`)];
+  const nodes = [summary, description(state.metric), guide(`Each row is one benchmark at the base and the head commit. ▲ regressed means its value rose by more than ${percent}%, and ▼ improved means it fell by more than ${percent}%. When both runs kept their samples, the change must also pass a rank-sum test at p < ${SIGNIFICANCE}. Environment means the benchmark ran on another machine, which alone can explain the change. Click a row to see its history.`)];
   if (outcome.envChanged) {
     nodes.push(el('p', { class: 'notice' }, `The measurement environment changed between these runs, from "${base.env_key}" to "${head.env_key}". Differences may come from the toolchain.`));
   }
@@ -211,7 +217,7 @@ async function renderCompare() {
       body.append(el('tr', onActivate(() => showHistory(row.id)),
         el('td', { class: 'mono' }, row.id),
         el('td', { class: 'number' }, format(row.base, state.metric)),
-        el('td', { class: 'number' }, format(row.head, state.metric)),
+        el('td', { class: 'number' }, format(row.head, state.metric), modes(head.results[row.id]?.[state.metric])),
         el('td', { class: 'number' }, formatDelta(row.delta)),
         el('td', {}, el('span', { class: `status ${row.status}` }, row.status)),
       ));
@@ -232,7 +238,10 @@ async function renderHistory() {
   setMetrics(runs);
   const reported = new Set();
   for (const run of runs) for (const [id, measures] of Object.entries(run.results)) if (state.metric in measures) reported.add(id);
-  const line = (id, name = '', slot = 0) => ({ name, slot, points: series(runs, id, state.metric) });
+  // A line per machine: a runner on other hardware is a different measurement.
+  const lines = (id, name = '', slot = 0) => series(runs, id, state.metric).map((line, dash) => ({
+    name: [name, line.environment].filter(Boolean).join(' · '), slot, dash, points: line.points,
+  }));
   const options = { runs, first, format: value => format(value, state.metric) };
   const nodes = [description(state.metric), guide('Each chart follows one benchmark over the selected runs, oldest on the left. Hover a point to see its commit, and click it to compare that run with the one before.')];
   // A benchmark measured for several variants gets one chart with a line per variant.
@@ -242,18 +251,20 @@ async function renderHistory() {
   for (const group of groups) {
     const charts = group.benchmarks
       .filter(benchmark => Object.values(benchmark.ids).some(id => reported.has(id)) && matches(benchmark.name, ...Object.values(benchmark.ids)))
-      .map(benchmark => chart({ ...options, title: benchmark.name, series: group.variants.filter(variant => reported.has(benchmark.ids[variant])).map(variant => line(benchmark.ids[variant], variant, slot(variant))) }));
+      .map(benchmark => chart({ ...options, title: benchmark.name, series: group.variants.filter(variant => reported.has(benchmark.ids[variant])).flatMap(variant => lines(benchmark.ids[variant], variant, slot(variant))) }));
     if (charts.length) nodes.push(el('h2', {}, group.name), el('div', { class: 'charts' }, ...charts));
   }
   const ids = [...reported].filter(id => !(id in tags) && matches(id));
   for (const [group, members] of groupIds(ids)) {
     nodes.push(el('h2', {}, group));
-    nodes.push(el('div', { class: 'charts' }, ...members.map(id => chart({ ...options, title: id === group ? id : id.slice(group.length + 1), series: [line(id)] }))));
+    nodes.push(el('div', { class: 'charts' }, ...members.map(id => chart({ ...options, title: id === group ? id : id.slice(group.length + 1), series: lines(id) }))));
   }
   if (nodes.length === 2) nodes.push(el('p', { class: 'message' }, 'No benchmark matches the filter.'));
   content.replaceChildren(...nodes);
 }
 
+// Lines of one variant on several machines share a color and differ in dashes.
+const DASHES = ['4 3', '1 3', '8 3 1 3'];
 const WIDTH = 300, HEIGHT = 96, PAD = { top: 6, right: 6, bottom: 6, left: 58 };
 
 /**
@@ -289,7 +300,7 @@ function chart({ title, series, runs, first, format, parity = false, caption = '
   });
   const color = line => `var(--series-${line.slot + 1})`;
   const dots = series.map(line => {
-    root.append(svg('path', { class: 'line', style: `stroke: ${color(line)}`, d: line.points.map((point, order) => `${order ? 'L' : 'M'}${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join('') }));
+    root.append(svg('path', { class: 'line', style: `stroke: ${color(line)}`, 'stroke-dasharray': line.dash ? DASHES[(line.dash - 1) % DASHES.length] : null, d: line.points.map((point, order) => `${order ? 'L' : 'M'}${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join('') }));
     const lone = line.points.length === 1;
     return svg('circle', { class: 'dot', style: `fill: ${color(line)}`, r: 4, cx: x(line.points[0].index), cy: y(line.points[0].value), visibility: lone ? 'visible' : 'hidden' });
   });
@@ -308,7 +319,8 @@ function chart({ title, series, runs, first, format, parity = false, caption = '
       const point = line.points[at], previous = line.points[at - 1];
       dots[number].setAttribute('cx', x(position)); dots[number].setAttribute('cy', y(point.value));
       return el('span', { class: 'entry' }, line.name && swatch(line.slot), line.name && `${line.name} `,
-        el('b', {}, format(point.value)), previous && previous.value !== 0 ? `  ${formatDelta(point.value / previous.value - 1)}` : '');
+        el('b', {}, format(point.value)), previous && previous.value !== 0 ? `  ${formatDelta(point.value / previous.value - 1)}` : '',
+        point.modality && point.modality !== 'unimodal' ? ` (${point.modality})` : '');
     });
     const environment = position > 0 && run.env_key !== runs[position - 1].env_key;
     tooltip.replaceChildren(...[

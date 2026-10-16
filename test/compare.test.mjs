@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compare, formatDelta, formatValue } from '../lib/compare.mjs';
+import { compare, formatDelta, formatValue, rankSumP } from '../lib/compare.mjs';
 
 const run = (results, env_key = 'rustc 1; valgrind 3') => ({
   env_key,
@@ -18,7 +18,7 @@ test('a gated metric above the threshold regresses the run and sorts first', () 
     options,
   );
   assert.equal(outcome.regressed, true);
-  assert.deepEqual(outcome.rows[0], { id: 'a', metric: 'Ir', base: 100, head: 200, delta: 1, status: 'regressed', gated: true });
+  assert.deepEqual(outcome.rows[0], { id: 'a', metric: 'Ir', base: 100, head: 200, delta: 1, p: null, status: 'regressed', gated: true });
   assert.equal(row(outcome, 'b', 'Ir').status, 'unchanged');
 });
 
@@ -44,7 +44,7 @@ test('the threshold applies in both directions', () => {
 test('new and missing benchmarks are reported and never regress the run', () => {
   const outcome = compare(run({ gone: { Ir: 100 } }), run({ added: { Ir: 1e9, wall: 3 } }), options);
   assert.equal(outcome.regressed, false);
-  assert.deepEqual(row(outcome, 'gone', 'Ir'), { id: 'gone', metric: 'Ir', base: 100, head: null, delta: null, status: 'missing', gated: true });
+  assert.deepEqual(row(outcome, 'gone', 'Ir'), { id: 'gone', metric: 'Ir', base: 100, head: null, delta: null, p: null, status: 'missing', gated: true });
   assert.equal(row(outcome, 'added', 'Ir').status, 'new');
   assert.equal(row(outcome, 'added', 'wall').status, 'new');
 });
@@ -61,6 +61,27 @@ test('a zero baseline regresses only when the value becomes nonzero', () => {
   assert.equal(row(outcome, 'a', 'Ir').status, 'unchanged');
   assert.equal(row(outcome, 'b', 'Ir').status, 'regressed');
   assert.equal(formatDelta(row(outcome, 'b', 'Ir').delta), 'was 0');
+});
+
+test('with samples on both sides, only a significant change leaves unchanged', () => {
+  const sampled = (center, width) => ({ value: center, samples: Array.from({ length: 30 }, (_, i) => center + (i % 6 - 2.5) * width) });
+  const timed = (results, environments = {}) => ({ environments, results: Object.fromEntries(Object.entries(results).map(([id, measure]) => [id, { time: measure }])) });
+  const outcome = compare(
+    timed({ shifted: sampled(100, 1), noisy: sampled(100, 40), moved: sampled(100, 1) }, { moved: 'EPYC' }),
+    timed({ shifted: sampled(105, 1), noisy: sampled(105, 40), moved: sampled(150, 1) }, { moved: 'Xeon' }),
+  );
+  assert.equal(row(outcome, 'shifted', 'time').status, 'regressed');
+  assert.ok(row(outcome, 'shifted', 'time').p < 0.01);
+  assert.equal(row(outcome, 'noisy', 'time').status, 'unchanged');
+  assert.equal(row(outcome, 'moved', 'time').status, 'environment');
+});
+
+test('the rank-sum test needs enough samples and treats identical samples as equal', () => {
+  assert.equal(rankSumP([1, 2, 3], [4, 5, 6]), null);
+  assert.equal(rankSumP(Array(10).fill(5), Array(10).fill(5)), 1);
+  const low = Array.from({ length: 10 }, (_, i) => i), high = low.map(value => value + 10);
+  assert.ok(rankSumP(low, high) < 0.001);
+  assert.equal(rankSumP(low, high), rankSumP(high, low));
 });
 
 test('values and deltas format for a table', () => {

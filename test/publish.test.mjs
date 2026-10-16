@@ -12,7 +12,7 @@ const remote = join(temp, 'remote.git');
 execFileSync('git', ['init', '--quiet', '--bare', remote]);
 
 let step = 0;
-function publish(results, { commit, envKey = 'rustc 1.98.1; valgrind-3.22.0' }) {
+function publish(results, { commit, envKey = 'rustc 1.98.1; valgrind-3.22.0', gates = 'Ir', branch = 'perf-data' }) {
   step += 1;
   const files = Object.entries(results).map(([name, content], index) => {
     const file = join(temp, `results-${step}-${index}-${name}.json`);
@@ -32,7 +32,8 @@ function publish(results, { commit, envKey = 'rustc 1.98.1; valgrind-3.22.0' }) 
       BENCHBOARD_COMMIT: commit,
       BENCHBOARD_TIME: `2026-10-0${step}T05:00:00Z`,
       BENCHBOARD_ENV_KEY: envKey,
-      BENCHBOARD_GATE_METRICS: 'Ir',
+      BENCHBOARD_GATE_METRICS: gates,
+      BENCHBOARD_DATA_BRANCH: branch,
       BENCHBOARD_THRESHOLD: '2',
       BENCHBOARD_VIEWER_URL: 'https://example.test/benchboard/',
       BENCHBOARD_REPORT: report,
@@ -46,7 +47,7 @@ function publish(results, { commit, envKey = 'rustc 1.98.1; valgrind-3.22.0' }) 
   }));
   return { outputs, report: readFileSync(report, 'utf8') };
 }
-const stored = path => JSON.parse(execFileSync('git', ['--git-dir', remote, 'show', `perf-data:${path}`], { encoding: 'utf8' }));
+const stored = (path, branch = 'perf-data') => JSON.parse(execFileSync('git', ['--git-dir', remote, 'show', `${branch}:${path}`], { encoding: 'utf8' }));
 const summary = (cases, extra = {}) => ({
   ...extra,
   results: Object.fromEntries(Object.entries(cases).map(([id, metrics]) => [
@@ -114,4 +115,22 @@ test('the data branch accumulates runs and reports regressions against the previ
 
 test('a metric that two results files report for one benchmark is rejected', () => {
   assert.throws(() => publish({ one: summary(micro), two: summary(micro) }, { commit: 'f'.repeat(40) }));
+});
+
+test('without gates, sampled changes are reported when significant and never open an issue', () => {
+  const branch = 'perf-timed';
+  const sampled = (center, width, extra = {}) => ({ value: center, samples: Array.from({ length: 20 }, (_, i) => center + (i % 5 - 2) * width), ...extra });
+  const timed = cases => ({ environment: 'x86_64 AMD EPYC 7763', results: Object.fromEntries(Object.entries(cases).map(([id, latency]) => [id, { latency }])) });
+  publish({ timed: timed({ steady: sampled(100, 1), noisy: sampled(100, 30) }) }, { commit: '1'.repeat(40), gates: '', branch });
+  const second = publish(
+    { timed: timed({ steady: sampled(110, 1), noisy: sampled(110, 30), split: sampled(50, 1, { modality: 'bimodal' }) }) },
+    { commit: '2'.repeat(40), gates: '', branch },
+  );
+  assert.equal(second.outputs.regressed, 'false');
+  assert.ok(second.report.includes('| `steady` | latency | 100 | 110 | +10.00% |'));
+  assert.ok(!second.report.includes('`noisy` | latency | 100'), 'a change inside the noise is not reported');
+  assert.match(second.report, /Several modes.*`split` latency \(bimodal\)/);
+  const last = stored(stored('index.json', branch).runs.at(-1).file, branch);
+  assert.equal(last.environments.steady, 'x86_64 AMD EPYC 7763');
+  assert.equal(last.results.steady.latency.samples.length, 20);
 });

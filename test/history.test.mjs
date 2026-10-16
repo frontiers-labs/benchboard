@@ -30,6 +30,11 @@ test('a series skips runs that did not report the benchmark', () => {
     { results: {} },
     { results: { a: { Ir: { value: 12 }, Dr: { value: 1 } } } },
   ];
-  assert.deepEqual(series(runs, 'a', 'Ir'), [{ index: 0, value: 10 }, { index: 2, value: 12 }]);
+  assert.deepEqual(series(runs, 'a', 'Ir'), [{ environment: '', points: [{ index: 0, value: 10, modality: undefined }, { index: 2, value: 12, modality: undefined }] }]);
   assert.deepEqual(series(runs, 'a', 'missing'), []);
+});
+
+test('a benchmark gets one series per machine it ran on', () => {
+  const runs = ['EPYC', 'Xeon', 'EPYC'].map((cpu, index) => ({ environments: { a: cpu }, results: { a: { time: { value: index } } } }));
+  assert.deepEqual(series(runs, 'a', 'time').map(line => [line.environment, line.points.map(point => point.index)]), [['EPYC', [0, 2]], ['Xeon', [1]]]);
 });
